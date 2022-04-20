@@ -45,6 +45,7 @@ import pickle
 import torch.multiprocessing as mp
 from sklearn.decomposition import PCA
 
+
 def make_plant_dataset(size):
     generator = combined_syn.get_generator([size])
     random.seed(3001)
@@ -52,12 +53,12 @@ def make_plant_dataset(size):
     # PATTERN 1
     pattern = generator.generate(size=10)
     # PATTERN 2
-    #pattern = nx.star_graph(9)
+    # pattern = nx.star_graph(9)
     # PATTERN 3
-    #pattern = nx.complete_graph(10)
+    # pattern = nx.complete_graph(10)
     # PATTERN 4
-    #pattern = nx.Graph()
-    #pattern.add_edges_from([(1, 2), (2, 3), (3, 4), (4, 5), (5, 6),
+    # pattern = nx.Graph()
+    # pattern.add_edges_from([(1, 2), (2, 3), (3, 4), (4, 5), (5, 6),
     #    (6, 7), (7, 2), (7, 8), (8, 9), (9, 10), (10, 6)])
     nx.draw(pattern, with_labels=True)
     plt.savefig("plots/cluster/plant-pattern.png")
@@ -74,6 +75,7 @@ def make_plant_dataset(size):
         graphs.append(graph)
     return graphs
 
+
 def pattern_growth(dataset, task, args):
     # init model
     if args.method_type == "end2end":
@@ -85,7 +87,7 @@ def pattern_growth(dataset, task, args):
     model.to(utils.get_device())
     model.eval()
     model.load_state_dict(torch.load(args.model_path,
-        map_location=utils.get_device()))
+                                     map_location=utils.get_device()))
 
     if task == "graph-labeled":
         dataset, labels = dataset
@@ -115,10 +117,10 @@ def pattern_growth(dataset, task, args):
                         neigh = graph.nodes
                     else:
                         neigh = list(nx.single_source_shortest_path_length(graph,
-                            node, cutoff=args.radius).keys())
+                                                                           node, cutoff=args.radius).keys())
                         if args.subgraph_sample_size != 0:
                             neigh = random.sample(neigh, min(len(neigh),
-                                args.subgraph_sample_size))
+                                                             args.subgraph_sample_size))
                     if len(neigh) > 1:
                         neigh = graph.subgraph(neigh)
                         if args.subgraph_sample_size != 0:
@@ -131,24 +133,24 @@ def pattern_growth(dataset, task, args):
             start_time = time.time()
             for j in tqdm(range(args.n_neighborhoods)):
                 graph, neigh = utils.sample_neigh(graphs,
-                    random.randint(args.min_neighborhood_size,
-                        args.max_neighborhood_size))
+                                                  random.randint(args.min_neighborhood_size,
+                                                                 args.max_neighborhood_size))
                 neigh = graph.subgraph(neigh)
                 neigh = nx.convert_node_labels_to_integers(neigh)
                 neigh.add_edge(0, 0)
                 neighs.append(neigh)
                 if args.node_anchored:
-                    anchors.append(0)   # after converting labels, 0 will be anchor
+                    anchors.append(0)  # after converting labels, 0 will be anchor
 
     embs = []
     if len(neighs) % args.batch_size != 0:
         print("WARNING: number of graphs not multiple of batch size")
     for i in range(len(neighs) // args.batch_size):
-        #top = min(len(neighs), (i+1)*args.batch_size)
-        top = (i+1)*args.batch_size
+        # top = min(len(neighs), (i+1)*args.batch_size)
+        top = (i + 1) * args.batch_size
         with torch.no_grad():
-            batch = utils.batch_nx_graphs(neighs[i*args.batch_size:top],
-                anchors=anchors if args.node_anchored else None)
+            batch = utils.batch_nx_graphs(neighs[i * args.batch_size:top],
+                                          anchors=anchors if args.node_anchored else None)
             emb = model.emb_model(batch)
             emb = emb.to(torch.device("cpu"))
 
@@ -156,18 +158,18 @@ def pattern_growth(dataset, task, args):
 
     if args.analyze:
         embs_np = torch.stack(embs).numpy()
-        plt.scatter(embs_np[:,0], embs_np[:,1], label="node neighborhood")
+        plt.scatter(embs_np[:, 0], embs_np[:, 1], label="node neighborhood")
 
     if args.search_strategy == "mcts":
         assert args.method_type == "order"
         agent = MCTSSearchAgent(args.min_pattern_size, args.max_pattern_size,
-            model, graphs, embs, node_anchored=args.node_anchored,
-            analyze=args.analyze, out_batch_size=args.out_batch_size)
+                                model, graphs, embs, node_anchored=args.node_anchored,
+                                analyze=args.analyze, out_batch_size=args.out_batch_size)
     elif args.search_strategy == "greedy":
         agent = GreedySearchAgent(args.min_pattern_size, args.max_pattern_size,
-            model, graphs, embs, node_anchored=args.node_anchored,
-            analyze=args.analyze, model_type=args.method_type,
-            out_batch_size=args.out_batch_size)
+                                  model, graphs, embs, node_anchored=args.node_anchored,
+                                  analyze=args.analyze, model_type=args.method_type,
+                                  out_batch_size=args.out_batch_size)
     out_graphs = agent.run_search(args.n_trials)
     print(time.time() - start_time, "TOTAL TIME")
     x = int(time.time() - start_time)
@@ -177,16 +179,16 @@ def pattern_growth(dataset, task, args):
     count_by_size = defaultdict(int)
     for pattern in out_graphs:
         if args.node_anchored:
-            colors = ["red"] + ["blue"]*(len(pattern)-1)
+            colors = ["red"] + ["blue"] * (len(pattern) - 1)
             nx.draw(pattern, node_color=colors, with_labels=True)
         else:
             nx.draw(pattern)
         print("Saving plots/cluster/{}-{}.png".format(len(pattern),
-            count_by_size[len(pattern)]))
+                                                      count_by_size[len(pattern)]))
         plt.savefig("plots/cluster/{}-{}.png".format(len(pattern),
-            count_by_size[len(pattern)]))
+                                                     count_by_size[len(pattern)]))
         plt.savefig("plots/cluster/{}-{}.pdf".format(len(pattern),
-            count_by_size[len(pattern)]))
+                                                     count_by_size[len(pattern)]))
         plt.close()
         count_by_size[len(pattern)] += 1
 
@@ -194,6 +196,7 @@ def pattern_growth(dataset, task, args):
         os.makedirs("results")
     with open(args.out_path, "wb") as f:
         pickle.dump(out_graphs, f)
+
 
 def main():
     if not os.path.exists("plots/cluster"):
@@ -203,7 +206,7 @@ def main():
     parse_encoder(parser)
     parse_decoder(parser)
     args = parser.parse_args()
-    #args.dataset = "enzymes"
+    # args.dataset = "enzymes"
 
     print("Using dataset {}".format(args.dataset))
     if args.dataset == 'enzymes':
@@ -235,9 +238,9 @@ def main():
         task = 'graph'
     elif args.dataset in ['diseasome', 'usroads', 'mn-roads', 'infect']:
         fn = {"diseasome": "bio-diseasome.mtx",
-            "usroads": "road-usroads.mtx",
-            "mn-roads": "mn-roads.mtx",
-            "infect": "infect-dublin.edges"}
+              "usroads": "road-usroads.mtx",
+              "mn-roads": "mn-roads.mtx",
+              "infect": "infect-dublin.edges"}
         graph = nx.Graph()
         with open("data/{}".format(fn[args.dataset]), "r") as f:
             for line in f:
@@ -251,11 +254,11 @@ def main():
         dataset = make_plant_dataset(size)
         task = 'graph'
     elif args.dataset == "arxiv":
-        dataset = PygNodePropPredDataset(name = "ogbn-arxiv")
+        dataset = PygNodePropPredDataset(name="ogbn-arxiv")
         task = "graph"
 
-    pattern_growth(dataset, task, args) 
+    pattern_growth(dataset, task, args)
+
 
 if __name__ == '__main__':
     main()
-
