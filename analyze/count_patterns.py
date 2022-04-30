@@ -42,6 +42,7 @@ from sklearn.decomposition import PCA
 
 import orca
 
+
 def arg_parse():
     parser = argparse.ArgumentParser(description='count graphlets in a graph')
     parser.add_argument('--dataset', type=str)
@@ -57,19 +58,20 @@ def arg_parse():
                         n_workers=4,
                         count_method="bin",
                         baseline="none")
-                        #node_anchored=True)
+    # node_anchored=True)
     return parser.parse_args()
 
+
 def gen_baseline_queries(queries, targets, method="mfinder",
-    node_anchored=False):
+                         node_anchored=False):
     # use this to generate N size K queries
-    #queries = [[0]*n for n in range(5, 21) for i in range(10)]
+    # queries = [[0]*n for n in range(5, 21) for i in range(10)]
     if method == "mfinder":
         return utils.gen_baseline_queries_mfinder(queries, targets,
-            node_anchored=node_anchored)
+                                                  node_anchored=node_anchored)
     elif method == "rand-esu":
         return utils.gen_baseline_queries_rand_esu(queries, targets,
-            node_anchored=node_anchored)
+                                                   node_anchored=node_anchored)
     neighs = []
     for i, query in enumerate(queries):
         print(i)
@@ -82,8 +84,8 @@ def gen_baseline_queries(queries, targets, method="mfinder",
                 graph = random.choice(targets)
                 node = random.choice(list(graph.nodes))
                 neigh = list(nx.single_source_shortest_path_length(graph, node,
-                    cutoff=3).keys())
-                #neigh = random.sample(neigh, min(len(neigh), 15))
+                                                                   cutoff=3).keys())
+                # neigh = random.sample(neigh, min(len(neigh), 15))
                 neigh = graph.subgraph(neigh)
                 neigh = neigh.subgraph(list(sorted(nx.connected_components(
                     neigh), key=len))[-1])
@@ -111,38 +113,39 @@ def gen_baseline_queries(queries, targets, method="mfinder",
                     found = True
     return neighs
 
+
 def count_graphlets_helper(inp):
     i, query, target, method, node_anchored, anchor_or_none = inp
     # NOTE: removing self loops!!
     query = query.copy()
     query.remove_edges_from(nx.selfloop_edges(query))
-    #if node_anchored and method == "bin":
+    # if node_anchored and method == "bin":
     #    n_chances_left = sum([len(g) for g in targets])
     if method == "freq":
         ismags = nx.isomorphism.ISMAGS(query, query)
         n_symmetries = len(list(ismags.isomorphisms_iter(symmetry=False)))
 
-    #print(n_symmetries, "symmetries")
+    # print(n_symmetries, "symmetries")
     n, n_bin = 0, 0
     target = target.copy()
     target.remove_edges_from(nx.selfloop_edges(target))
-    #print(i, j, len(target), n / n_symmetries)
-    #matcher = nx.isomorphism.ISMAGS(target, query)
+    # print(i, j, len(target), n / n_symmetries)
+    # matcher = nx.isomorphism.ISMAGS(target, query)
     if method == "bin":
         if node_anchored:
             for anchor in (target.nodes if anchor_or_none is None else
-                [anchor_or_none]):
-                #if random.random() > 0.1: continue
+            [anchor_or_none]):
+                # if random.random() > 0.1: continue
                 nx.set_node_attributes(target, 0, name="anchor")
                 target.nodes[anchor]["anchor"] = 1
                 matcher = iso.GraphMatcher(target, query,
-                    node_match=iso.categorical_node_match(["anchor"], [0]))
+                                           node_match=iso.categorical_node_match(["anchor"], [0]))
                 if matcher.subgraph_is_isomorphic():
                     n += 1
-            #else:
-                #n_chances_left -= 1
-                #if n_chances_left < min_count:
-                #    return i, -1
+            # else:
+            # n_chances_left -= 1
+            # if n_chances_left < min_count:
+            #    return i, -1
         else:
             matcher = iso.GraphMatcher(target, query)
             n += int(matcher.subgraph_is_isomorphic())
@@ -151,32 +154,33 @@ def count_graphlets_helper(inp):
         n += len(list(matcher.subgraph_isomorphisms_iter())) / n_symmetries
     else:
         print("counting method not understood")
-    #n_matches.append(n / n_symmetries)
-    #print(i, n / n_symmetries)
-    count = n# / n_symmetries
-    #if include_bin:
+    # n_matches.append(n / n_symmetries)
+    # print(i, n / n_symmetries)
+    count = n  # / n_symmetries
+    # if include_bin:
     #    count = (count, n_bin)
-    #print(i, count)
+    # print(i, count)
     return i, count
 
+
 def count_graphlets(queries, targets, n_workers=1, method="bin",
-    node_anchored=False, min_count=0):
+                    node_anchored=False, min_count=0):
     print(len(queries), len(targets))
-    #idxs, counts = zip(*[count_graphlets_helper((i, q, targets, include_bin))
+    # idxs, counts = zip(*[count_graphlets_helper((i, q, targets, include_bin))
     #    for i, q in enumerate(queries)])
-    #counts = list(counts)
-    #return counts
+    # counts = list(counts)
+    # return counts
 
     n_matches = defaultdict(float)
-    #for i, query in enumerate(queries):
+    # for i, query in enumerate(queries):
     pool = Pool(processes=n_workers)
     if node_anchored:
         inp = [(i, query, target, method, node_anchored, anchor) for i, query
-            in enumerate(queries) for target in targets for anchor in (target
-                if len(targets) < 10 else [None])]
+               in enumerate(queries) for target in targets for anchor in (target
+                                                                          if len(targets) < 10 else [None])]
     else:
         inp = [(i, query, target, method, node_anchored, None) for i, query
-            in enumerate(queries) for target in targets]
+               in enumerate(queries) for target in targets]
     print(len(inp))
     n_done = 0
     for i, n in pool.imap_unordered(count_graphlets_helper, inp):
@@ -186,6 +190,7 @@ def count_graphlets(queries, targets, n_workers=1, method="bin",
     print()
     n_matches = [n_matches[i] for i in range(len(n_matches))]
     return n_matches
+
 
 def count_exact(queries, targets, args):
     print("WARNING: orca only works for node anchored")
@@ -200,14 +205,14 @@ def count_exact(queries, targets, args):
     # don't include size < 5
     n_matches_baseline = list(n_matches_baseline)[15:]
     counts5 = []
-    num5 = 10#len([q for q in queries if len(q) == 5])
+    num5 = 10  # len([q for q in queries if len(q) == 5])
     for x in list(sorted(n_matches_baseline, reverse=True))[:num5]:
         print(x)
         counts5.append(x)
     print("Average for size 5:", np.mean(np.log10(counts5)))
 
     atlas = [g for g in nx.graph_atlas_g()[1:] if nx.is_connected(g)
-        and len(g) == 6]
+             and len(g) == 6]
     queries = []
     for g in atlas:
         for v in g.nodes:
@@ -217,23 +222,24 @@ def count_exact(queries, targets, args):
             is_dup = False
             for g2 in queries:
                 if nx.is_isomorphic(g, g2, node_match=(lambda a, b: a["anchor"]
-                    == b["anchor"]) if args.node_anchored else None):
+                                                                    == b["anchor"]) if args.node_anchored else None):
                     is_dup = True
                     break
             if not is_dup:
                 queries.append(g)
     print(len(queries))
     n_matches_baseline = count_graphlets(queries, targets,
-        n_workers=args.n_workers, method=args.count_method,
-        node_anchored=args.node_anchored,
-        min_count=10000)
+                                         n_workers=args.n_workers, method=args.count_method,
+                                         node_anchored=args.node_anchored,
+                                         min_count=10000)
     counts6 = []
-    num6 = 20#len([q for q in queries if len(q) == 6])
+    num6 = 20  # len([q for q in queries if len(q) == 6])
     for x in list(sorted(n_matches_baseline, reverse=True))[:num6]:
         print(x)
         counts6.append(x)
     print("Average for size 6:", np.mean(np.log10(counts6)))
     return counts5 + counts6
+
 
 if __name__ == "__main__":
     args = arg_parse()
@@ -257,9 +263,9 @@ if __name__ == "__main__":
         dataset = [graph]
     elif args.dataset in ['diseasome', 'usroads', 'mn-roads', 'infect']:
         fn = {"diseasome": "bio-diseasome.mtx",
-            "usroads": "road-usroads.mtx",
-            "mn-roads": "mn-roads.mtx",
-            "infect": "infect-dublin.edges"}
+              "usroads": "road-usroads.mtx",
+              "mn-roads": "mn-roads.mtx",
+              "infect": "infect-dublin.edges"}
         graph = nx.Graph()
         with open("data/{}".format(fn[args.dataset]), "r") as f:
             for line in f:
@@ -275,11 +281,35 @@ if __name__ == "__main__":
             cand_patterns, _ = pickle.load(f)
             queries = [q for score, q in cand_patterns[10]][:200]
         dataset = TUDataset(root='/tmp/ENZYMES', name='ENZYMES')
+    elif args.dataset.startswith('data-'):
+        task = "graph"
+        dataset = []
+        # for custom dataset
+        # get custom dataset name
+        dataset_name = args.dataset.replace('data-', '', 1)
+
+        # path of dataset
+        dataset_path = os.path.join('./data', dataset_name)
+
+        # all name of files in custom dataset
+        file_names = os.listdir(dataset_path)
+
+        # read each file and covert it
+        for file_name in file_names:
+            if file_name.split('.')[-1] == 'gexf':
+                # read gexf file
+                file_path = os.path.join(dataset_path, file_name)
+                g = nx.read_gexf(file_path, node_type=int)
+                g_pyg = pyg_utils.from_networkx(g, group_node_attrs=['r'])
+                g_covert = pyg_utils.to_networkx(g_pyg, node_attrs=['x'])
+                relabel_mapping = {k: v['x'] for k, v in dict(g_covert.nodes.data()).items()}
+                g_relabel = nx.relabel_nodes(g_covert, relabel_mapping)
+                dataset.append(g_relabel)
 
     targets = []
     for i in range(len(dataset)):
         graph = dataset[i]
-        if not type(graph) == nx.Graph:
+        if not type(graph) == nx.Graph and not type(graph) == nx.DiGraph:
             graph = pyg_utils.to_networkx(dataset[i]).to_undirected()
         targets.append(graph)
 
@@ -288,30 +318,30 @@ if __name__ == "__main__":
             queries = pickle.load(f)
 
     # filter only top nonisomorphic size 6 motifs
-    #filt_q = []
-    #for q in queries:
+    # filt_q = []
+    # for q in queries:
     #    if len([qc for qc in filt_q if nx.is_isomorphic(q, qc)]) == 0:
     #        filt_q.append(q)
-    #queries = filt_q[:]
-    #print(len(queries))
-            
+    # queries = filt_q[:]
+    # print(len(queries))
+
     query_lens = [len(query) for query in queries]
 
     if args.baseline == "exact":
         n_matches_baseline = count_exact(queries, targets, args)
         n_matches = count_graphlets(queries[:len(n_matches_baseline)], targets,
-            n_workers=args.n_workers, method=args.count_method,
-            node_anchored=args.node_anchored)
+                                    n_workers=args.n_workers, method=args.count_method,
+                                    node_anchored=args.node_anchored)
     elif args.baseline == "none":
         n_matches = count_graphlets(queries, targets,
-            n_workers=args.n_workers, method=args.count_method,
-            node_anchored=args.node_anchored)
+                                    n_workers=args.n_workers, method=args.count_method,
+                                    node_anchored=args.node_anchored)
     else:
         baseline_queries = gen_baseline_queries(queries, targets,
-            node_anchored=args.node_anchored, method=args.baseline)
+                                                node_anchored=args.node_anchored, method=args.baseline)
         query_lens = [len(q) for q in baseline_queries]
         n_matches = count_graphlets(baseline_queries, targets,
-            n_workers=args.n_workers, method=args.count_method,
-            node_anchored=args.node_anchored)
+                                    n_workers=args.n_workers, method=args.count_method,
+                                    node_anchored=args.node_anchored)
     with open(args.out_path, "w") as f:
         json.dump((query_lens, n_matches, []), f)
