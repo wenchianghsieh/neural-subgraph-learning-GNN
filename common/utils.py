@@ -89,7 +89,7 @@ def wl_hash(g, dim=64, node_anchored=False):
                 vecs[v] = 1
                 break
     for i in range(len(g)):
-        newvecs = np.zeros((len(g), dim), dtype=np.int)
+        newvecs = np.zeros((len(g), dim), dtype=np.int64)
         for n in g.nodes:
             newvecs[n] = vec_hash(np.sum(vecs[list(g.neighbors(n)) + [n]],
                                          axis=0))

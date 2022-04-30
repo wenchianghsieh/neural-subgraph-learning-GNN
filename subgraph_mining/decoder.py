@@ -101,7 +101,8 @@ def pattern_growth(dataset, task, args):
     for i, graph in enumerate(dataset):
         if task == "graph-labeled" and labels[i] != 0: continue
         if task == "graph-truncate" and i >= 1000: break
-        if not type(graph) == nx.Graph:
+        # modify for DiGraph also not need covert
+        if (not type(graph) == nx.Graph) and (not type(graph) == nx.DiGraph):
             graph = pyg_utils.to_networkx(graph).to_undirected()
         graphs.append(graph)
     if args.use_whole_graphs:
@@ -256,6 +257,30 @@ def main():
     elif args.dataset == "arxiv":
         dataset = PygNodePropPredDataset(name="ogbn-arxiv")
         task = "graph"
+    elif args.dataset.startswith('data-'):
+        task = "graph"
+        dataset = []
+        # for custom dataset
+        # get custom dataset name
+        dataset_name = args.dataset.replace('data-', '', 1)
+
+        # path of dataset
+        dataset_path = os.path.join('./data', dataset_name)
+
+        # all name of files in custom dataset
+        file_names = os.listdir(dataset_path)
+
+        # read each file and covert it
+        for file_name in file_names:
+            if file_name.split('.')[-1] == 'gexf':
+                # read gexf file
+                file_path = os.path.join(dataset_path, file_name)
+                g = nx.read_gexf(file_path, node_type=int)
+                g_pyg = pyg_utils.from_networkx(g, group_node_attrs=['r'])
+                g_covert = pyg_utils.to_networkx(g_pyg, node_attrs=['x'])
+                relabel_mapping = {k: v['x'] for k, v in dict(g_covert.nodes.data()).items()}
+                g_relabel = nx.relabel_nodes(g_covert, relabel_mapping)
+                dataset.append(g_relabel)
 
     pattern_growth(dataset, task, args)
 
